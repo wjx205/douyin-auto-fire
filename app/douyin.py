@@ -5,7 +5,7 @@ import re
 
 from playwright.async_api import Locator, Page
 
-from app.selectors import CHAT_PANEL_MARKERS, MESSAGE_INPUTS, SEARCH_INPUTS
+from app.selectors import CHAT_PANEL_MARKERS, DOUYIN_CHAT_URL, MESSAGE_INPUTS, SEARCH_INPUTS
 
 
 class PageOperationError(RuntimeError):
@@ -62,8 +62,8 @@ class DouyinChat:
             # symbols or very long nicknames) are visible in the conversation
             # list but are not returned by Douyin's search panel.  Fall back to
             # the exact title in the full conversation list before giving up.
-            await search.fill("")
-            await self.page.wait_for_timeout(500)
+            await self.page.goto(DOUYIN_CHAT_URL, wait_until="domcontentloaded", timeout=45_000)
+            await self.page.wait_for_timeout(3_000)
             result = await self._conversation_list_result(name)
         if result is None:
             raise PageOperationError("搜索不到目标好友")
