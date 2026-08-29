@@ -62,8 +62,11 @@ class DouyinChat:
             # symbols or very long nicknames) are visible in the conversation
             # list but are not returned by Douyin's search panel.  Fall back to
             # the exact title in the full conversation list before giving up.
-            await self.page.goto(DOUYIN_CHAT_URL, wait_until="domcontentloaded", timeout=45_000)
-            await self.page.wait_for_timeout(3_000)
+            try:
+                await self.page.goto(DOUYIN_CHAT_URL, wait_until="domcontentloaded", timeout=45_000)
+                await self.page.wait_for_timeout(3_000)
+            except Exception:
+                pass
             result = await self._conversation_list_result(name)
         if result is None:
             raise PageOperationError("搜索不到目标好友")
