@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import unicodedata
 
 from playwright.async_api import Locator, Page
 
@@ -87,13 +88,19 @@ class DouyinChat:
                 rows = self.page.locator('[data-e2e="conversation-item"]')
                 for index in range(await rows.count()):
                     row = rows.nth(index)
-                    title = await _visible_exact_text_locator(
-                        row,
-                        ('[class="conversationConversationItemtitle"]',),
-                        name,
-                    )
-                    if title is not None and await row.is_visible():
-                        return row
+                    titles = row.locator('[class="conversationConversationItemtitle"]')
+                    for title_index in range(await titles.count()):
+                        title = titles.nth(title_index)
+                        try:
+                            actual = await title.inner_text(timeout=500)
+                            if (
+                                await title.is_visible()
+                                and await row.is_visible()
+                                and _conversation_title_matches(actual, name)
+                            ):
+                                return row
+                        except Exception:
+                            continue
 
                 state = await scroll.evaluate(
                     "element => ({ top: element.scrollTop, "
@@ -373,6 +380,20 @@ def _group_count_suffix_matches(actual: str, expected: str) -> bool:
         return True
     pattern = _GROUP_COUNT_SUFFIX_RE_TEMPLATE.format(name=re.escape(expected))
     return re.fullmatch(pattern, actual) is not None
+
+
+def _conversation_title_matches(actual: str, expected: str) -> bool:
+    """Match a visible conversation title without trusting a broad substring."""
+    def normalized(value: str) -> str:
+        return unicodedata.normalize("NFKC", value).replace("\ufe0e", "").replace("\ufe0f", "").strip()
+
+    actual_normalized = normalized(actual)
+    expected_normalized = normalized(expected)
+    if actual_normalized == expected_normalized:
+        return True
+    # Douyin can visually truncate exceptionally long titles.  A 12-character
+    # prefix is specific enough for the existing conversation list fallback.
+    return len(expected_normalized) > 12 and actual_normalized.startswith(expected_normalized[:12])
 
 
 async def _group_name_matches(locator: Locator, expected: str) -> bool:
