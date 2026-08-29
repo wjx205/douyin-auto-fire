@@ -44,10 +44,19 @@ class DouyinChat:
         search = await first_visible(self.page, SEARCH_INPUTS, self.timeout_ms)
         await search.click()
         await search.fill("")
-        await search.fill(name)
-        await self.page.wait_for_timeout(1_500)
-
-        result = await self._search_result(name)
+        result = None
+        queries = [
+            name,
+            name.replace("\ufe0e", "").replace("\ufe0f", ""),
+            name[:12],
+        ]
+        for query in dict.fromkeys(query for query in queries if query):
+            await search.fill("")
+            await search.fill(query)
+            await self.page.wait_for_timeout(1_500)
+            result = await self._search_result(name)
+            if result is not None:
+                break
         if result is None:
             # Some existing conversations (notably names containing uncommon
             # symbols or very long nicknames) are visible in the conversation
