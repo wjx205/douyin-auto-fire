@@ -64,10 +64,14 @@ class DouyinChat:
             # list but are not returned by Douyin's search panel.  Fall back to
             # the exact title in the full conversation list before giving up.
             try:
-                await self.page.goto(DOUYIN_CHAT_URL, wait_until="domcontentloaded", timeout=45_000)
+                await self.page.reload(wait_until="domcontentloaded", timeout=45_000)
                 await self.page.wait_for_timeout(3_000)
             except Exception:
-                pass
+                try:
+                    await self.page.goto(DOUYIN_CHAT_URL, wait_until="domcontentloaded", timeout=45_000)
+                    await self.page.wait_for_timeout(3_000)
+                except Exception:
+                    pass
             result = await self._conversation_list_result(name)
         if result is None:
             raise PageOperationError("搜索不到目标好友")
@@ -276,6 +280,17 @@ class DouyinChat:
                     continue
                 if await _visible_exact_or_group_text_in(header, title_selectors, name):
                     return None
+                for title_selector in title_selectors:
+                    titles = header.locator(title_selector)
+                    for title_index in range(await titles.count()):
+                        title = titles.nth(title_index)
+                        try:
+                            if await title.is_visible() and _conversation_title_matches(
+                                await title.inner_text(timeout=500), name
+                            ):
+                                return None
+                        except Exception:
+                            continue
 
         composer_visible = await self._composer_visible()
         return PageOperationError(
