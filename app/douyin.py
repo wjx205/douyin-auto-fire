@@ -49,9 +49,59 @@ class DouyinChat:
 
         result = await self._search_result(name)
         if result is None:
+            # Some existing conversations (notably names containing uncommon
+            # symbols or very long nicknames) are visible in the conversation
+            # list but are not returned by Douyin's search panel.  Fall back to
+            # the exact title in the full conversation list before giving up.
+            await search.fill("")
+            await self.page.wait_for_timeout(500)
+            result = await self._conversation_list_result(name)
+        if result is None:
             raise PageOperationError("搜索不到目标好友")
         await result.click(force=True)
         await self._confirm_opened(name)
+
+    async def _conversation_list_result(self, name: str) -> Locator | None:
+        """Find an exact existing conversation, scrolling the virtual list."""
+        try:
+            scroll = self.page.locator(".conversationConversationListwrapper").first
+            if not await scroll.count() or not await scroll.is_visible():
+                return None
+            await scroll.evaluate("element => { element.scrollTop = 0; }")
+            await self.page.wait_for_timeout(300)
+
+            previous_top = -1
+            for _ in range(50):
+                rows = self.page.locator('[data-e2e="conversation-item"]')
+                for index in range(await rows.count()):
+                    row = rows.nth(index)
+                    title = await _visible_exact_text_locator(
+                        row,
+                        ('[class="conversationConversationItemtitle"]',),
+                        name,
+                    )
+                    if title is not None and await row.is_visible():
+                        return row
+
+                state = await scroll.evaluate(
+                    "element => ({ top: element.scrollTop, "
+                    "height: element.scrollHeight, client: element.clientHeight })"
+                )
+                top = int(state.get("top", 0))
+                if top == previous_top or top + int(state.get("client", 0)) >= int(state.get("height", 0)) - 2:
+                    break
+                previous_top = top
+                await scroll.evaluate(
+                    "element => { element.scrollTop = Math.min("
+                    "element.scrollTop + Math.max(300, element.clientHeight * 0.75), "
+                    "element.scrollHeight); }"
+                )
+                await self.page.wait_for_timeout(300)
+        except Exception:
+            # The normal search error remains the public failure mode if the
+            # page no longer exposes a compatible conversation list.
+            return None
+        return None
 
     async def _search_result(self, name: str) -> Locator | None:
         # Search mode renders a separate SearchPanel. Its "发消息" action is the
